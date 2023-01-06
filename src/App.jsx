@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { flushSync } from "react-dom";
 import "./App.css";
 import crossImg from "./assets/x4.png";
 import circleImg from "./assets/c1.png";
@@ -60,19 +61,29 @@ class Board extends Component {
 
 function GameRelated(props) {
   if (props.gameStarted) {
-    const playerName = props.isHumanTurn ? "Ваш" : "ИИ";
+    const playerName = props.isHumanTurn ? "Ваш ход:" : "Ход ИИ:";
     return (
       <div id="game-related">
         <p>
-          Ход: <span id="current-layer">{playerName}</span>
+          <span id="current-layer">{playerName}</span>
         </p>
         <Board cells={props.cells} onClick={props.handleFunction}></Board>
+      </div>
+    );
+  } else if (props.gameEnded) {
+    const playerName = props.isHumanTurn ? "Вы победили!" : "ИИ победил!";
+    return (
+      <div id="game-related">
+        <p>
+          <span id="current-layer">{playerName}</span>
+        </p>
+        <Board cells={props.cells} onClick={() => {}}></Board>
       </div>
     );
   } else {
     return (
       <div id="game-related">
-        <p>Выбери за кого играть</p>
+        <p>Выберите за кого играть:</p>
         <input
           type="image"
           src={circleImg}
@@ -111,11 +122,12 @@ class App extends Component {
       AIFigure: "",
       isHumanTurn: false,
       gameStarted: false,
+      gameEnded: false,
     };
   }
 
   render() {
-    const { gameStarted, isHumanTurn, cells } = this.state;
+    const { gameStarted, gameEnded, isHumanTurn, cells } = this.state;
 
     let handleFunction = (_) => {};
     if (isHumanTurn) {
@@ -129,6 +141,7 @@ class App extends Component {
           crossHandler={() => this.startGame({ isHumanTurn: false })}
           cells={cells}
           gameStarted={gameStarted}
+          gameEnded={gameEnded}
           isHumanTurn={isHumanTurn}
           handleFunction={handleFunction}
         ></GameRelated>
@@ -147,18 +160,20 @@ class App extends Component {
         gameStarted: true,
       });
     } else {
-      this.setState({
-        humanFigure: Figure.cross,
-        AIFigure: Figure.circle,
-        isHumanTurn: false,
-        gameStarted: true,
-      });
-      this.AITurn();
+      this.setState(
+        {
+          humanFigure: Figure.cross,
+          AIFigure: Figure.circle,
+          isHumanTurn: false,
+          gameStarted: true,
+        },
+        () => this.AITurn()
+      );
     }
   }
 
-  makeTurn(cells, i, figure) {
-    const newCells = cells.slice();
+  makeTurn(i, figure) {
+    const newCells = this.state.cells.slice();
     newCells[i] = {
       value: figure,
       imageSource: imageMap[figure],
@@ -173,17 +188,29 @@ class App extends Component {
       return;
     }
 
-    const newCells = this.makeTurn(cells, i, humanFigure);
-
-    this.setState({
-      cells: newCells,
-      isHumanTurn: false,
-    });
+    const newCells = this.makeTurn(i, humanFigure);
 
     const { winner, winCombination } = this.chooseWinner(newCells, humanFigure);
     if (winner) {
+      flushSync(() => {
+        this.setState({
+          cells: newCells,
+        });
+      });
       this.win(winner, winCombination);
+    } else if (
+      newCells.every((cell) => {
+        return cell.value != null;
+      })
+    ) {
+      // ничья
     } else {
+      flushSync(() => {
+        this.setState({
+          cells: newCells,
+          isHumanTurn: false,
+        });
+      });
       this.AITurn();
     }
   }
@@ -191,18 +218,20 @@ class App extends Component {
   AITurn() {
     const { AIFigure, cells } = this.state;
 
-    let newCells;
-    if (cells.every((v) => v == null)) {
-      newCells = this.makeTurn(cells, 4, AIFigure);
+    let newCells = [];
+
+    console.log(cells);
+    if (cells.every((cell) => cell.value == null)) {
+      newCells = this.makeTurn(4, AIFigure);
+    } else {
+      console.log("not empty");
+      newCells = cells;
+    }
+    flushSync(() => {
       this.setState({
         cells: newCells,
         isHumanTurn: true,
       });
-    } else {
-      newCells = cells;
-    }
-    this.setState({
-      isHumanTurn: true,
     });
 
     const { winner, winCombination } = this.chooseWinner(newCells, AIFigure);
@@ -243,9 +272,13 @@ class App extends Component {
   }
 
   win(winner, winCombination) {
-    this.setState({
-      gameStarted: false,
+    flushSync(() => {
+      this.setState({
+        gameStarted: false,
+        gameEnded: true,
+      });
     });
+
     console.log(`Winner is ${winner}`);
     console.log(winCombination);
     console.log(this.state.cells);
