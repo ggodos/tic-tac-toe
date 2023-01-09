@@ -3,11 +3,14 @@ import { flushSync } from "react-dom";
 import "./App.css";
 import crossImg from "./assets/x4.png";
 import circleImg from "./assets/c1.png";
+import { makeAITurn, getWinCombination } from "./AIBrain";
 
 const Figure = {
   circle: "circle",
   cross: "cross",
 };
+
+const AITurnDelay = 150;
 
 const imageSize = 48;
 const selectButtonSize = 32;
@@ -71,11 +74,10 @@ function GameRelated(props) {
       </div>
     );
   } else if (props.gameEnded) {
-    const playerName = props.isHumanTurn ? "Вы победили!" : "ИИ победил!";
     return (
       <div id="game-related">
         <p>
-          <span id="current-layer">{playerName}</span>
+          <span id="current-layer">{props.winMessage}</span>
         </p>
         <Board cells={props.cells} onClick={() => {}}></Board>
       </div>
@@ -123,11 +125,14 @@ class App extends Component {
       isHumanTurn: false,
       gameStarted: false,
       gameEnded: false,
+      winMessage: "лол",
+      turn: 1,
     };
   }
 
   render() {
-    const { gameStarted, gameEnded, isHumanTurn, cells } = this.state;
+    const { gameStarted, gameEnded, isHumanTurn, cells, winMessage } =
+      this.state;
 
     let handleFunction = (_) => {};
     if (isHumanTurn) {
@@ -137,12 +142,13 @@ class App extends Component {
     return (
       <div className="App">
         <GameRelated
-          circleHandler={() => this.startGame({ isHumanTurn: true })}
-          crossHandler={() => this.startGame({ isHumanTurn: false })}
+          circleHandler={() => this.startGame({ isHumanTurn: false })}
+          crossHandler={() => this.startGame({ isHumanTurn: true })}
           cells={cells}
           gameStarted={gameStarted}
           gameEnded={gameEnded}
           isHumanTurn={isHumanTurn}
+          winMessage={winMessage}
           handleFunction={handleFunction}
         ></GameRelated>
       </div>
@@ -154,22 +160,30 @@ class App extends Component {
 
     if (isHumanTurn) {
       this.setState({
-        humanFigure: Figure.circle,
-        AIFigure: Figure.cross,
+        humanFigure: Figure.cross,
+        AIFigure: Figure.circle,
         isHumanTurn: true,
         gameStarted: true,
       });
     } else {
-      this.setState(
-        {
-          humanFigure: Figure.cross,
-          AIFigure: Figure.circle,
+      flushSync(() => {
+        this.setState({
+          humanFigure: Figure.circle,
+          AIFigure: Figure.cross,
           isHumanTurn: false,
           gameStarted: true,
-        },
-        () => this.AITurn()
-      );
+        });
+      });
+      this.AITurn();
     }
+  }
+
+  setupHumanTurn() {
+    flushSync(() => {
+      this.setState({
+        isHumanTurn: true,
+      });
+    });
   }
 
   makeTurn(i, figure) {
@@ -183,20 +197,31 @@ class App extends Component {
   }
 
   cellClickHandle(i) {
-    const { cells, humanFigure } = this.state;
+    const { cells, humanFigure, turn } = this.state;
     if (cells[i].used) {
       return;
     }
 
     const newCells = this.makeTurn(i, humanFigure);
 
-    const { winner, winCombination } = this.chooseWinner(newCells, humanFigure);
-    if (winner) {
-      flushSync(() => {
-        this.setState({
-          cells: newCells,
-        });
+    const winCombination = getWinCombination(
+      newCells.map((item) => item.value)
+    );
+    flushSync(() => {
+      this.setState({
+        cells: newCells,
+        isHumanTurn: false,
+        turn: turn + 1,
       });
+    });
+    if (winCombination) {
+      const winner = newCells[winCombination[0]];
+      // flushSync(() => {
+      //   this.setState({
+      //     cells: newCells,
+      //     turn: turn + 1,
+      //   });
+      // });
       this.win(winner, winCombination);
     } else if (
       newCells.every((cell) => {
@@ -204,71 +229,54 @@ class App extends Component {
       })
     ) {
       // ничья
+      this.tie();
     } else {
-      flushSync(() => {
-        this.setState({
-          cells: newCells,
-          isHumanTurn: false,
-        });
-      });
+      // не победил
+      // flushSync(() => {
+      //   this.setState({
+      //     cells: newCells,
+      //     isHumanTurn: false,
+      //     turn: turn + 1,
+      //   });
+      // });
+      // setTimeout(() => this.AITurn(), 250);
       this.AITurn();
+      console.log("ИИ сходил");
     }
   }
 
   AITurn() {
-    const { AIFigure, cells } = this.state;
+    const { cells, turn, AIFigure, humanFigure } = this.state;
 
     let newCells = [];
-
     console.log(cells);
-    if (cells.every((cell) => cell.value == null)) {
-      newCells = this.makeTurn(4, AIFigure);
-    } else {
-      console.log("not empty");
-      newCells = cells;
-    }
+    let i = makeAITurn(
+      cells.map((item) => item.value),
+      AIFigure,
+      humanFigure,
+      AIFigure
+    );
+    console.log(i);
+    newCells = this.makeTurn(i, AIFigure);
     flushSync(() => {
       this.setState({
         cells: newCells,
         isHumanTurn: true,
+        turn: turn + 1,
       });
     });
 
-    const { winner, winCombination } = this.chooseWinner(newCells, AIFigure);
-    if (winner) {
+    const winCombination = getWinCombination(
+      newCells.map((item) => item.value)
+    );
+    if (winCombination) {
+      const winner = newCells[winCombination[0]];
       this.win(winner, winCombination);
     }
   }
 
-  chooseWinner(cells, figure) {
-    const winCombinations = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [6, 4, 2],
-    ];
-
-    let winner = undefined;
-    let winCombination = undefined;
-    winCombinations.forEach((combination) => {
-      const firstCombinationFigure = cells[combination[0]].value;
-      const winValid = combination.every((cellNumber) => {
-        const cellFigure = cells[cellNumber].value;
-        if (cellFigure == null) {
-          return false;
-        }
-        return cellFigure == firstCombinationFigure;
-      });
-      if (winValid) {
-        winner = figure == firstCombinationFigure ? "human" : "AI";
-        winCombination = combination;
-      }
-    });
-    return { winner, winCombination };
+  tie() {
+    console.log("случился прикол");
   }
 
   win(winner, winCombination) {
@@ -276,6 +284,7 @@ class App extends Component {
       this.setState({
         gameStarted: false,
         gameEnded: true,
+        winMessage: `Победил {winner}`,
       });
     });
 
