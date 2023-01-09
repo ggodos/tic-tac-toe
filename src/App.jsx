@@ -1,62 +1,45 @@
-import { useState, Component } from 'react'
-import reactLogo from './assets/react.svg'
-import './App.css'
-import crossImg from './assets/x4.png'
-import circleImg from './assets/c1.png'
+import { Component } from "react";
+import { flushSync } from "react-dom";
+import "./App.css";
+import crossImg from "./assets/x4.png";
+import circleImg from "./assets/c1.png";
+import { makeAITurn, getWinCombination } from "./AIBrain";
 
-function reverseKeyValues(obj)
-{
-  return Object.fromEntries(
-    Object
-      .entries(obj)
-      .map(([key, value]) => [value, key])
-  )
-}
+const Figure = {
+  circle: "circle",
+  cross: "cross",
+};
 
-const playerFigureMap = {
-  first: 'circle',
-  second: 'cross'
-}
-const figurePlayerMap = reverseKeyValues(playerFigureMap)
+const AITurnDelay = 150;
 
-function getFigure(player)
-{
-  return playerFigureMap[player]
-}
-function getPlayer(figure)
-{
-  return figurePlayerMap[figure]
-}
-
-
-const imageSize = 32;
+const imageSize = 48;
+const selectButtonSize = 32;
 const imageMap = {
-  'circle': circleImg,
-  'cross': crossImg,
-}
+  circle: circleImg,
+  cross: crossImg,
+};
 
-function Cell(props)
-{
+function Cell(props) {
   return (
-    <div id={props.cellId} className='cell' onClick={props.onClick}>
+    <div id={props.cellId} className="cell" onClick={props.onClick}>
       <img src={props.imageSource} alt="" min-width={imageSize} />
     </div>
-  )
+  );
 }
 
-class Board extends Component
-{
-  renderCell(i)
-  {
-    const cells = this.props.cells
-    return <Cell
-      cellId={`cell-${i}`}
-      imageSource={cells[i].imageSource}
-      onClick={() => this.props.onClick(i)} />
+class Board extends Component {
+  renderCell(i) {
+    const cells = this.props.cells;
+    return (
+      <Cell
+        cellId={`cell-${i}`}
+        imageSource={cells[i].imageSource}
+        onClick={() => this.props.onClick(i)}
+      />
+    );
   }
 
-  render()
-  {
+  render() {
     return (
       <div id="board">
         <div className="board-row">
@@ -75,147 +58,244 @@ class Board extends Component
           {this.renderCell(8)}
         </div>
       </div>
-    )
+    );
   }
 }
 
+function GameRelated(props) {
+  if (props.gameStarted) {
+    const playerName = props.isHumanTurn ? "Ваш ход:" : "Ход ИИ:";
+    return (
+      <div id="game-related">
+        <p>
+          <span id="current-layer">{playerName}</span>
+        </p>
+        <Board cells={props.cells} onClick={props.handleFunction}></Board>
+      </div>
+    );
+  } else if (props.gameEnded) {
+    return (
+      <div id="game-related">
+        <p>
+          <span id="current-layer">{props.winMessage}</span>
+        </p>
+        <Board cells={props.cells} onClick={() => {}}></Board>
+      </div>
+    );
+  } else {
+    return (
+      <div id="game-related">
+        <p>Выберите за кого играть:</p>
+        <input
+          type="image"
+          src={circleImg}
+          id="circle-button"
+          className="choose-button"
+          width={selectButtonSize}
+          onClick={props.circleHandler}
+        />
+        <input
+          type="image"
+          src={crossImg}
+          id="cross-button"
+          className="choose-button"
+          width={selectButtonSize}
+          onClick={props.crossHandler}
+        />
+      </div>
+    );
+  }
+}
 
-
-class App extends Component
-{
-  constructor(props)
-  {
-    super(props)
-    const gameCells = Array(9).fill().map((v, i) => ({
-      value: null,
-      used: false,
-      imageSource: ''
-    }))
+class App extends Component {
+  constructor(props) {
+    super(props);
+    const gameCells = Array(9)
+      .fill()
+      .map(() => ({
+        value: null, // фигура для проверки победы
+        imageSource: "", // путь для отрисовки фигуры
+        used: false, // была ли выбрана
+      }));
 
     this.state = {
       cells: gameCells,
-      current: null,
-      turn: 0,
-      gameStarted: false
-    }
-  }
-  startGame(settings)
-  {
-    const { figure } = settings;
-    document.getElementById('cross-button').disabled = true
-    document.getElementById('circle-button').disabled = true
-    this.setState(state => ({
-      current: figure,
-      turn: state.turn + 1,
-      gameStarted: true
-    }))
+      humanFigure: "",
+      AIFigure: "",
+      isHumanTurn: false,
+      gameStarted: false,
+      gameEnded: false,
+      winMessage: "лол",
+      turn: 1,
+    };
   }
 
+  render() {
+    const { gameStarted, gameEnded, isHumanTurn, cells, winMessage } =
+      this.state;
 
-  cellClickHandle(i)
-  {
-    const { cells, current } = this.state;
-    if (cells[i].used)
-    {
-      return
+    let handleFunction = (_) => {};
+    if (isHumanTurn) {
+      handleFunction = (i) => this.cellClickHandle(i);
     }
-    const newCells = cells.slice()
 
+    return (
+      <div className="App">
+        <GameRelated
+          circleHandler={() => this.startGame({ isHumanTurn: false })}
+          crossHandler={() => this.startGame({ isHumanTurn: true })}
+          cells={cells}
+          gameStarted={gameStarted}
+          gameEnded={gameEnded}
+          isHumanTurn={isHumanTurn}
+          winMessage={winMessage}
+          handleFunction={handleFunction}
+        ></GameRelated>
+      </div>
+    );
+  }
+
+  startGame(settings) {
+    const { isHumanTurn } = settings;
+
+    if (isHumanTurn) {
+      this.setState({
+        humanFigure: Figure.cross,
+        AIFigure: Figure.circle,
+        isHumanTurn: true,
+        gameStarted: true,
+      });
+    } else {
+      flushSync(() => {
+        this.setState({
+          humanFigure: Figure.circle,
+          AIFigure: Figure.cross,
+          isHumanTurn: false,
+          gameStarted: true,
+        });
+      });
+      this.AITurn();
+    }
+  }
+
+  setupHumanTurn() {
+    flushSync(() => {
+      this.setState({
+        isHumanTurn: true,
+      });
+    });
+  }
+
+  makeTurn(i, figure) {
+    const newCells = this.state.cells.slice();
     newCells[i] = {
-      value: current,
-      imageSource: imageMap[current],
-      used: true
+      value: figure,
+      imageSource: imageMap[figure],
+      used: true,
+    };
+    return newCells;
+  }
+
+  cellClickHandle(i) {
+    const { cells, humanFigure, turn } = this.state;
+    if (cells[i].used) {
+      return;
     }
-    const newCurrent = current == getFigure('first') ? getFigure('second') : getFigure('first')
 
-    this.setState({
-      cells: newCells,
-      current: newCurrent
-    })
+    const newCells = this.makeTurn(i, humanFigure);
 
-    const { winner, winCombination } = this.chooseWinner(newCells)
-    if (winner)
-    {
-      this.win(winner, winCombination)
+    const winCombination = getWinCombination(
+      newCells.map((item) => item.value)
+    );
+    flushSync(() => {
+      this.setState({
+        cells: newCells,
+        isHumanTurn: false,
+        turn: turn + 1,
+      });
+    });
+    if (winCombination) {
+      const winner = newCells[winCombination[0]];
+      // flushSync(() => {
+      //   this.setState({
+      //     cells: newCells,
+      //     turn: turn + 1,
+      //   });
+      // });
+      this.win(winner, winCombination);
+    } else if (
+      newCells.every((cell) => {
+        return cell.value != null;
+      })
+    ) {
+      // ничья
+      this.tie();
+    } else {
+      // не победил
+      // flushSync(() => {
+      //   this.setState({
+      //     cells: newCells,
+      //     isHumanTurn: false,
+      //     turn: turn + 1,
+      //   });
+      // });
+      // setTimeout(() => this.AITurn(), 250);
+      this.AITurn();
+      console.log("ИИ сходил");
     }
   }
 
-  win(winner, winCombination)
-  {
-    this.setState({
-      gameStarted: false
-    })
+  AITurn() {
+    const { cells, turn, AIFigure, humanFigure } = this.state;
+
+    let newCells = [];
+    console.log(cells);
+    let i = makeAITurn(
+      cells.map((item) => item.value),
+      AIFigure,
+      humanFigure,
+      AIFigure
+    );
+    console.log(i);
+    newCells = this.makeTurn(i, AIFigure);
+    flushSync(() => {
+      this.setState({
+        cells: newCells,
+        isHumanTurn: true,
+        turn: turn + 1,
+      });
+    });
+
+    const winCombination = getWinCombination(
+      newCells.map((item) => item.value)
+    );
+    if (winCombination) {
+      const winner = newCells[winCombination[0]];
+      this.win(winner, winCombination);
+    }
+  }
+
+  tie() {
+    console.log("случился прикол");
+  }
+
+  win(winner, winCombination) {
+    flushSync(() => {
+      this.setState({
+        gameStarted: false,
+        gameEnded: true,
+        winMessage: `Победил {winner}`,
+      });
+    });
+
     console.log(`Winner is ${winner}`);
     console.log(winCombination);
     console.log(this.state.cells);
-    winCombination.forEach(v =>
-    {
-      const el = document.getElementById(`cell-${v}`)
-      el.style.backgroundColor = "limegreen"
-    })
-  }
-
-  chooseWinner(cells)
-  {
-    const winCombinations = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [6, 4, 2]
-    ]
-
-    let winner = undefined
-    let winCombination = undefined
-    winCombinations.forEach(combination =>
-    {
-      const firstCombinationFigure = cells[combination[0]].value
-      const winValid = combination.every((cellNumber) =>
-      {
-        const cellFigure = cells[cellNumber].value
-        // console.log(...combination, ...(combination.map(v => cells[v].value)));
-        if (cellFigure == null)
-        {
-          return false
-        }
-        return cellFigure == firstCombinationFigure
-      })
-      if (winValid)
-      {
-        winner = getPlayer(firstCombinationFigure)
-        winCombination = combination
-      }
-    })
-    return { winner, winCombination }
-  }
-
-
-  render()
-  {
-    const { gameStarted } = this.state
-    const handleFunction = gameStarted ? i => this.cellClickHandle(i) : () => { }
-    return (
-      <div className="App">
-        <p>Выбери за кого играть</p>
-        <input type="image"
-          src={circleImg}
-          id='circle-button'
-          className='choose-button'
-          width={imageSize}
-          onClick={() => this.startGame({ figure: "circle" })} />
-        <input type="image"
-          src={crossImg}
-          id='cross-button'
-          className='choose-button'
-          width={imageSize}
-          onClick={() => this.startGame({ figure: "cross" })} />
-        <Board cells={this.state.cells} onClick={handleFunction}></Board>
-      </div >
-    )
+    winCombination.forEach((v) => {
+      const el = document.getElementById(`cell-${v}`);
+      el.style.backgroundColor = "limegreen";
+    });
   }
 }
 
-export default App
+export default App;
