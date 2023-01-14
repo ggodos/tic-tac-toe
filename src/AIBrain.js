@@ -85,7 +85,7 @@ export function makeAITurn(cells, yourFigure, enemyFigure, currentFigure) {
         return { value: -100 + depth };
       }
     }
-    const isTie = checkTie(cells, [yourFigure, enemyFigure]);
+    const isTie = checkTie(cells);
     if (isTie) {
       return { value: 0 };
     }

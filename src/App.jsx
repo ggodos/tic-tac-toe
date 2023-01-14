@@ -155,6 +155,25 @@ class App extends Component {
     );
   }
 
+  checkTie() {
+    const { cells, humanFigure, AIFigure } = this.state;
+    const validFigures = [humanFigure, AIFigure];
+    return cells.every((cell) => {
+      const val = cell ? cell.value : null;
+      return validFigures.includes(val);
+    });
+  }
+
+  getPlayerFromFigure(figure) {
+    const { humanFigure, AIFigure } = this.state;
+    if (figure == humanFigure) {
+      return "player";
+    } else if (figure == AIFigure) {
+      return "AI";
+    }
+    return null;
+  }
+
   startGame(settings) {
     const { isHumanTurn } = settings;
 
@@ -215,33 +234,14 @@ class App extends Component {
       });
     });
     if (winCombination) {
-      const winner = newCells[winCombination[0]];
-      // flushSync(() => {
-      //   this.setState({
-      //     cells: newCells,
-      //     turn: turn + 1,
-      //   });
-      // });
+      const winner = newCells[winCombination[0]].value;
       this.win(winner, winCombination);
-    } else if (
-      newCells.every((cell) => {
-        return cell.value != null;
-      })
-    ) {
+    } else if (this.checkTie()) {
       // ничья
       this.tie();
     } else {
       // не победил
-      // flushSync(() => {
-      //   this.setState({
-      //     cells: newCells,
-      //     isHumanTurn: false,
-      //     turn: turn + 1,
-      //   });
-      // });
-      // setTimeout(() => this.AITurn(), 250);
       this.AITurn();
-      console.log("ИИ сходил");
     }
   }
 
@@ -249,14 +249,12 @@ class App extends Component {
     const { cells, turn, AIFigure, humanFigure } = this.state;
 
     let newCells = [];
-    console.log(cells);
     let i = makeAITurn(
       cells.map((item) => item.value),
       AIFigure,
       humanFigure,
       AIFigure
     );
-    console.log(i);
     newCells = this.makeTurn(i, AIFigure);
     flushSync(() => {
       this.setState({
@@ -270,27 +268,49 @@ class App extends Component {
       newCells.map((item) => item.value)
     );
     if (winCombination) {
-      const winner = newCells[winCombination[0]];
+      const winner = newCells[winCombination[0]].value;
       this.win(winner, winCombination);
+    } else if (this.checkTie()) {
+      this.tie();
     }
   }
 
   tie() {
-    console.log("случился прикол");
-  }
-
-  win(winner, winCombination) {
+    const { cells } = this.state;
     flushSync(() => {
       this.setState({
         gameStarted: false,
         gameEnded: true,
-        winMessage: `Победил {winner}`,
+        winMessage: "Ничья",
       });
     });
 
-    console.log(`Winner is ${winner}`);
-    console.log(winCombination);
-    console.log(this.state.cells);
+    cells.forEach((v, idx) => {
+      const el = document.getElementById(`cell-${idx}`);
+      el.style.backgroundColor = "lightblue";
+    });
+  }
+
+  win(winnerFigure, winCombination) {
+    const winner = this.getPlayerFromFigure(winnerFigure);
+    if (winner == "player") {
+      flushSync(() => {
+        this.setState({
+          gameStarted: false,
+          gameEnded: true,
+          winMessage: `Ты победил`,
+        });
+      });
+    } else if (winner == "AI") {
+      flushSync(() => {
+        this.setState({
+          gameStarted: false,
+          gameEnded: true,
+          winMessage: `ИИ победил`,
+        });
+      });
+    }
+
     winCombination.forEach((v) => {
       const el = document.getElementById(`cell-${v}`);
       el.style.backgroundColor = "limegreen";
